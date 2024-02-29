@@ -1,6 +1,9 @@
 import numpy as np
 import os
 from PIL import Image
+from sklearn.neighbors import KNeighborsClassifier
+
+import time
 
 Dataset = "Dataset"
 
@@ -48,8 +51,8 @@ def calculate_between_class_scatter_matrix(class_means, overall_mean, class_size
     # Calculate S_B
     for class_label, mean_vector in class_means.items():
         nk = class_sizes[class_label]
-        diff = mean_vector - overall_mean
-        S_B += nk * (diff @ diff.T)
+        diff = np.array([mean_vector - overall_mean])
+        S_B += nk * diff.T @ diff
 
     return S_B
 
@@ -57,19 +60,20 @@ def calculate_between_class_scatter_matrix(class_means, overall_mean, class_size
 def calculate_within_class_scatter_matrix(data_matrix, label_vector, class_means):
     col = data_matrix.shape[1]  # number of features
     S_W = np.zeros((col, col))  # initialize S_W square matrix with zeros
-    centered_data = np.zeros_like(data_matrix)
+    centered_data = np.zeros((data_matrix.shape[0], data_matrix.shape[1]))
 
     for class_label, mean_vector in class_means.items():
         # calculate S_W
         class_indices = np.where(label_vector == class_label)[0]
-        z = data_matrix[class_indices] - mean_vector
-        S_W += z.T @ z
-        centered_data[class_indices] = z
+        z = np.subtract(data_matrix[class_indices], mean_vector)
+        S_W += np.dot(np.transpose(z), z)
+        centered_data[class_indices, :] = z
+
     return S_W, centered_data
 
 
 def computeEigen(cov):
-    eigenvalues, eigenvectors = np.linalg.eig(cov)
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
     sorted_indices = np.argsort(eigenvalues)[::-1]
     sorted_eigenvalues = eigenvalues[sorted_indices]
     sorted_eigenvectors = eigenvectors[:, sorted_indices]
@@ -98,36 +102,72 @@ def LDA(data_matrix_train, label_vector_train, class_sizes):
     # calculate between class scatter matrix
     S_B = calculate_between_class_scatter_matrix(class_means, overall_mean, class_sizes)
 
-
     # calculate within class scatter matrix
-    # S_W, Z = calculate_within_class_scatter_matrix(data_matrix_train, label_vector_train, class_means)
-    #
-    # # Get the inverse of S_W
-    # S_W_inv = np.linalg.inv(S_W)
-    #
-    # result = S_W_inv @ S_B
-    #
-    # eigenvalues, eigenvectors = computeEigen(result)
-    #
-    # # Choose the top 39 eigenvalues and eigenvectors
-    # num_components = 39
-    # selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues, eigenvectors, num_components)
-    #
-    # eigenvectors = Z.T @ selected_eigenvectors
-    # normalizeEigenvectors(eigenvectors)
-    # projectedData = Z @ eigenvectors
-    #
-    # return projectedData, eigenvectors
+    S_W, Z = calculate_within_class_scatter_matrix(data_matrix_train, label_vector_train, class_means)
 
+    # Get the inverse of S_W
+    S_W_inv = np.linalg.inv(S_W)
+
+    result = S_W_inv @ S_B
+
+    eigenvalues, eigenvectors = computeEigen(result)
+
+    # Choose the top 39 eigenvalues and eigenvectors
+    num_components = 39
+    selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues, eigenvectors, num_components)
+
+    # eigenvectors = Z @ selected_eigenvectors
+    # normalizeEigenvectors(eigenvectors)
+
+    return class_means, selected_eigenvectors
+
+
+def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test):
+    classifier = KNeighborsClassifier(n_neighbors=1)
+    # Train the classifier using the projected training set
+    classifier.fit(projectedData_train, labelVector_train)
+    # Predict labels for the projected test set
+    predicted_labels = classifier.predict(projectedData_test)
+    # Calculate accuracy
+    accuracy = np.mean(predicted_labels == labelVector_test)
+    return accuracy
+
+
+def centralize(data_matrix, label_vector, class_means):
+    Z = np.zeros((data_matrix.shape[0], data_matrix.shape[1]))
+
+    for class_label, mean_vector in class_means.items():
+        class_indices = np.where(label_vector == class_label)[0]
+        z = np.subtract(data_matrix[class_indices], mean_vector)
+        Z[class_indices, :] = z
+
+    return Z
+
+
+start = time.time()
 # Read Data
 data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
 # Split Data
-data_matrix_train, label_vector_train, data_matrix_test, label_vector_test = split_dataset(data_matrix, label_vector)
+data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset(data_matrix, label_vector)
 # Calculate number of samples in each class
-class_sizes = {class_label: np.sum(label_vector_train == class_label)
-               for class_label in np.unique(label_vector_train)}
+class_sizes = {class_label: np.sum(labelVector_train == class_label)
+               for class_label in np.unique(labelVector_train)}
 # Run LDA algorithm
-LDA(data_matrix_train, label_vector_train, class_sizes)
+# LDA(data_matrix_train, label_vector_train, class_sizes)
+class_means, projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes)
 
-# print(f"ProjectionMatrix : {projectionMatrix.shape}")
-# print(f"Projected_data : {projected_data.shape}")
+Z_train = centralize(data_matrix_train,labelVector_train, class_means)
+projectedData_train = Z_train @ projectionMatrix
+
+Z_test = centralize(dataMatrix_test, labelVector_test, class_means)
+projectedData_test = Z_test @ projectionMatrix
+
+accuracy = test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+
+print(f"Projected data : {projectedData_train.shape}")
+print(f"Projection matrix : {projectionMatrix.shape}")
+print("accuracy: ", accuracy)
+
+end = time.time()
+
+print("Time in seconds ", (end - start))
