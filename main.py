@@ -2,42 +2,58 @@ from PIL import Image
 import os
 import numpy as np
 import re
-# Folder path containing subfolders with .pgm images
-main_folder_path = "./face recongnition"
 
-# Initialize an array to store flattened images
-flattened_images = []
-labels = []
-label_cnt = 0
-# Loop through subfolders
-for subfolder_name in os.listdir(main_folder_path):
-    subfolder_path = os.path.join(main_folder_path, subfolder_name)
+def read_and_flatten(folder_path):
+    trainingSample = []
+    testSample = []
+    for file_name in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file_name)
+        img = Image.open(file_path).convert('L')  # Convert to grayscale using 'L' mode
+        flattened_img = np.array(img).flatten()
+        file_number = re.search(r'\d+', file_name)
+        file_number = int(file_number.group())
+        if file_number % 2 != 0:  # odd training
+            trainingSample.append(flattened_img)
+        else:
+            testSample.append(flattened_img)
 
-    # Ensure it's a directory
-    if os.path.isdir(subfolder_path):
-        # Loop through images in each subfolder (assuming there are 10 images in each subfolder)
-        match = re.search(r'\d+', subfolder_name)
-        label_cnt = int(match.group()) if match else None
-        for i in range(1, 11):
-            image_name = f"{i}.pgm"
-            image_path = os.path.join(subfolder_path, image_name)
+    return np.array(trainingSample), np.array(testSample)
 
-            # Read the image using PIL
-            try:
-                img = Image.open(image_path)
-                # Flatten the image and append it to the list
-                flattened_img = np.array(img).flatten()
-                flattened_images.append(flattened_img)
-                labels.append(label_cnt)
-                print(f"subfolder : {subfolder_path} : {i}")
-                print(f"labels : {label_cnt}")
-            except Exception as e:
-                print(f"Error reading image {image_path}: {e}")
+main_folder_path = r"./face recongnition"
+num_classes = 40
 
-flattened_images = np.array(flattened_images)
-labels = np.array(labels)
+trainingSet = []
+testSet = []
 
-print(f"Shape of flattened_images: {flattened_images.shape}")
-print(f"Shape of labels: {labels.shape}")
+for i in range(1, num_classes + 1):
+    class_folder_path = os.path.join(main_folder_path, f"s{i}")
+    training, test = read_and_flatten(class_folder_path)
+    trainingSet.append(training)
+    testSet.extend(test)
+
+trainingSet = np.array(trainingSet)
+testSet = np.array(testSet)
+
+mean_training_per_class = np.mean(trainingSet, axis=1)
+overall_mean = np.mean((mean_training_per_class), axis=0)
 
 
+# calculate Sb
+# Sb = []
+# for i in range(0, 40):
+#     tmp = (mean_training_per_class[i] - overall_mean)
+#     Sb += np.outer(tmp, tmp)
+#
+# print(Sb)
+# print(overall_mean.shape)
+# print(overall_mean)
+
+# print("-"*30,mean_training_per_class)
+
+# Print the shape of mean_training_per_class
+# print(f"Shape of mean_training_per_class: {mean_training_per_class.shape}")
+
+# # Print the mean for each class
+# for i, mean_class in enumerate(mean_training_per_class, start=1):
+#     print(f"Mean for Class {i}:\n{mean_class}")
+#     print("-" * 40)
