@@ -1,6 +1,8 @@
 import numpy as np
 # import cupy as cp
 import os
+
+import torch
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -66,10 +68,17 @@ def calculate_within_and_between_class_scatter_matrices(data_matrix, label_vecto
 
 
 def computeEigen(cov):
-    eigenvalues, eigenvectors = np.linalg.eigh(cov)
-    sorted_indices = np.argsort(eigenvalues)[::-1]
+    cov_tensor = torch.tensor(cov, dtype=torch.float32)
+    eigenvalues, eigenvectors = torch.linalg.eigh(cov_tensor)
+
+    sorted_indices = torch.argsort(eigenvalues, descending=True)
     sorted_eigenvalues = eigenvalues[sorted_indices]
     sorted_eigenvectors = eigenvectors[:, sorted_indices]
+
+    # If you need the results as NumPy arrays, you can convert them
+    sorted_eigenvalues = sorted_eigenvalues.numpy()
+    sorted_eigenvectors = sorted_eigenvectors.numpy()
+
     return sorted_eigenvalues, sorted_eigenvectors
 
 
