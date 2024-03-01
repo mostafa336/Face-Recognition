@@ -173,8 +173,7 @@ for alpha in alpha_values:
     print("For alpha : ", alpha)
     # Run PCA
     projectedData_train, projectionMatrix = PCA(dataMatrix_train73, alpha)
-
-    # Project test Data
+    # Project test  Data
     projectedData_test = centralizeData(dataMatrix_test73) @ projectionMatrix
     # Test data and Calculate Accuracy
     test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73)
