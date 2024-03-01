@@ -1,4 +1,5 @@
 import numpy as np
+# import cupy as cp
 import os
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
@@ -44,32 +45,24 @@ def calculate_class_means(data_matrix, label_vector):
     return class_means
 
 
-def calculate_between_class_scatter_matrix(class_means, overall_mean, class_sizes):
-    col = len(overall_mean)  # number of features
-    S_B = np.zeros((col, col))  # initialize S_B with zeros
-
-    # Calculate S_B
-    for class_label, mean_vector in class_means.items():
-        nk = class_sizes[class_label]
-        diff = np.array([mean_vector - overall_mean])
-        S_B += nk * diff.T @ diff
-
-    return S_B
-
-
-def calculate_within_class_scatter_matrix(data_matrix, label_vector, class_means):
+def calculate_within_and_between_class_scatter_matrices(data_matrix, label_vector, class_means,
+                                          overall_mean, class_sizes):
     col = data_matrix.shape[1]  # number of features
     S_W = np.zeros((col, col))  # initialize S_W square matrix with zeros
-    centered_data = np.zeros((data_matrix.shape[0], data_matrix.shape[1]))
+    S_B = np.zeros((col, col))  # initialize S_لآ square matrix with zeros
 
     for class_label, mean_vector in class_means.items():
         # calculate S_W
         class_indices = np.where(label_vector == class_label)[0]
         z = np.subtract(data_matrix[class_indices], mean_vector)
         S_W += np.dot(np.transpose(z), z)
-        centered_data[class_indices, :] = z
 
-    return S_W, centered_data
+        # calculate S_W
+        nk = class_sizes[class_label]
+        diff = np.array([mean_vector - overall_mean])
+        S_B += nk * diff.T @ diff
+
+    return S_W, S_B
 
 
 def computeEigen(cov):
@@ -99,22 +92,20 @@ def LDA(data_matrix_train, label_vector_train, class_sizes):
     class_means = calculate_class_means(data_matrix_train, label_vector_train)
     overall_mean = np.mean(data_matrix_train, axis=0)
 
-    # calculate between class scatter matrix
-    S_B = calculate_between_class_scatter_matrix(class_means, overall_mean, class_sizes)
-
-    # calculate within class scatter matrix
-    S_W, Z = calculate_within_class_scatter_matrix(data_matrix_train, label_vector_train, class_means)
+    # calculate within and between class scatter matrices
+    S_W, S_B = calculate_within_and_between_class_scatter_matrices(data_matrix_train, label_vector_train,
+                                                                   class_means, overall_mean, class_sizes)
 
     # Get the inverse of S_W
     S_W_inv = np.linalg.inv(S_W)
-
     result = S_W_inv @ S_B
 
     eigenvalues, eigenvectors = computeEigen(result)
 
     # Choose the top 39 eigenvalues and eigenvectors
     num_components = 39
-    selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues, eigenvectors, num_components)
+    selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues,
+                                                                       eigenvectors, num_components)
 
     # eigenvectors = Z @ selected_eigenvectors
     # normalizeEigenvectors(eigenvectors)
@@ -148,7 +139,8 @@ start = time.time()
 # Read Data
 data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
 # Split Data
-data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset(data_matrix, label_vector)
+data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset(data_matrix,
+                                                                                        label_vector)
 # Calculate number of samples in each class
 class_sizes = {class_label: np.sum(labelVector_train == class_label)
                for class_label in np.unique(labelVector_train)}
