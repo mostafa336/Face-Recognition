@@ -5,7 +5,8 @@ from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 
 Dataset = "Dataset"
-alpha = 0.9
+alpha_values = [0.8, 0.85, 0.9, 0.95]
+k_values = [1, 3, 5, 7]
 
 
 def createDataMatrixLabelVector(directory):
@@ -24,13 +25,45 @@ def createDataMatrixLabelVector(directory):
     return np.array(images), np.array(labels)
 
 
-def split_dataset(dataMatrix, labelVector):
+def split_dataset_50_50(dataMatrix, labelVector):
     dataMatrix_train = dataMatrix[::2]  # (odd rows)
     labelVector_train = labelVector[::2]
     dataMatrix_test = dataMatrix[1::2]  # (even rows)
     labelVector_test = labelVector[1::2]
     return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
 
+
+def split_dataset_70_30(dataMatrix, labelVector):
+    # Assuming dataMatrix and labelVector are both numpy arrays
+    subjects = np.unique(labelVector)
+    dataMatrix_train = []
+    labelVector_train = []
+    dataMatrix_test = []
+    labelVector_test = []
+
+    for subject in subjects:
+        # Extract indices of instances belonging to the current subject
+        indices = np.where(labelVector == subject)[0]
+
+        # Split indices into training and test sets
+        train_indices = indices[:7]  # 7 instances for training
+        test_indices = indices[7:10]  # 3 instances for testing
+
+        # Add training data and labels
+        dataMatrix_train.append(dataMatrix[train_indices])
+        labelVector_train.extend(labelVector[train_indices])
+
+        # Add test data and labels
+        dataMatrix_test.append(dataMatrix[test_indices])
+        labelVector_test.extend(labelVector[test_indices])
+
+    # Concatenate lists into numpy arrays
+    dataMatrix_train = np.concatenate(dataMatrix_train)
+    dataMatrix_test = np.concatenate(dataMatrix_test)
+    labelVector_train = np.array(labelVector_train)
+    labelVector_test = np.array(labelVector_test)
+
+    return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
 
 def centralizeData(dataMatrix):
     mean = np.mean(dataMatrix, axis=0)
@@ -75,34 +108,64 @@ def PCA(D, alpha):
 
 
 def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test):
-    classifier = KNeighborsClassifier(n_neighbors=1)
-    # Train the classifier using the projected training set
-    classifier.fit(projectedData_train, labelVector_train)
-    # Predict labels for the projected test set
-    predicted_labels = classifier.predict(projectedData_test)
-    # Calculate accuracy
-    accuracy = np.mean(predicted_labels == labelVector_test)
-    return accuracy
+    # Iterate over each value of k
+    for k in k_values:
+        classifier = KNeighborsClassifier(n_neighbors=k, weights='distance')
+        # Train the classifier using the training set
+        classifier.fit(projectedData_train, labelVector_train)
+
+        # Predict labels for the test set
+        predicted_labels = classifier.predict(projectedData_test)
+
+        # Calculate accuracy
+        accuracy = np.mean(predicted_labels == labelVector_test)
+        print("Accuracy for k =", k, ":", accuracy)
 
 
 # Read Data
 dataMatrix, labelVector = createDataMatrixLabelVector(Dataset)
 # Split Data
-dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset(dataMatrix, labelVector)
-# Run PCA
-projectedData_train, projectionMatrix = PCA(dataMatrix_train, alpha)
-# Project test Data
-projectedData_test = centralizeData(dataMatrix_test) @ projectionMatrix
-# Test data and Calculate Accuracy
-accuracy = test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(dataMatrix, labelVector)
+dataMatrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(dataMatrix, labelVector)
 
 print("Data Matrix shape:", dataMatrix.shape)
 print("Label vector shape:", labelVector.shape)
-print("Data Matrix test shape:", dataMatrix_test.shape)
-print("Label vector test shape:", labelVector_test.shape)
-print("Data Matrix train shape:", dataMatrix_train.shape)
-print("Label vector train shape:", labelVector_train.shape)
-print("Projection Matrix shape:", projectionMatrix.shape)
-print("Projected train data shape ", projectedData_train.shape)
-print("Projected test data shape ", projectedData_test.shape)
-print("Accuracy :", accuracy, " Alpha : ", alpha)
+print("50% 50% Data Matrix test shape:", dataMatrix_test.shape)
+print("50% 50% Label vector test shape:", labelVector_test.shape)
+print("50% 50% Data Matrix train shape:", dataMatrix_train.shape)
+print("50% 50% Label vector train shape:", labelVector_train.shape)
+print("70% 30% Data Matrix test shape:", dataMatrix_test73.shape)
+print("70% 30% Label vector test shape:", labelVector_test73.shape)
+print("70% 30% Data Matrix train shape:", dataMatrix_train73.shape)
+print("70% 30% Label vector train shape:", labelVector_train73.shape)
+
+print("50% 50% split :")
+for alpha in alpha_values:
+    print("For alpha : ", alpha)
+    # Run PCA
+    projectedData_train, projectionMatrix = PCA(dataMatrix_train, alpha)
+    # Project test Data
+    projectedData_test = centralizeData(dataMatrix_test) @ projectionMatrix
+    # Test data and Calculate Accuracy
+    test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+
+
+print("70% 30% split :")
+for alpha in alpha_values:
+    print("For alpha : ", alpha)
+    # Run PCA
+    projectedData_train, projectionMatrix = PCA(dataMatrix_train73, alpha)
+    # Project test Data
+    projectedData_test = centralizeData(dataMatrix_test73) @ projectionMatrix
+    # Test data and Calculate Accuracy
+    test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73)
+
+# print("Data Matrix shape:", dataMatrix.shape)
+# print("Label vector shape:", labelVector.shape)
+# print("Data Matrix test shape:", dataMatrix_test.shape)
+# print("Label vector test shape:", labelVector_test.shape)
+# print("Data Matrix train shape:", dataMatrix_train.shape)
+# print("Label vector train shape:", labelVector_train.shape)
+# print("Projection Matrix shape:", projectionMatrix.shape)
+# print("Projected train data shape ", projectedData_train.shape)
+# print("Projected test data shape ", projectedData_test.shape)
