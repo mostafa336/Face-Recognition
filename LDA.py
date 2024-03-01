@@ -157,10 +157,11 @@ class_sizes = {class_label: np.sum(labelVector_train == class_label)
 # LDA(data_matrix_train, label_vector_train, class_sizes)
 class_means, projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes)
 
-Z_train = centralize(data_matrix_train,labelVector_train, class_means)
+overall_mean = np.mean(data_matrix_train, axis=0)
+Z_train = data_matrix_train - overall_mean  # centralize(data_matrix_train,labelVector_train, class_means)
 projectedData_train = Z_train @ projectionMatrix
 
-Z_test = centralize(dataMatrix_test, labelVector_test, class_means)
+Z_test = dataMatrix_test - overall_mean    # centralize(dataMatrix_test, labelVector_test, class_means)
 projectedData_test = Z_test @ projectionMatrix
 
 accuracy = test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
