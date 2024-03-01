@@ -1,6 +1,8 @@
+import time
+
 import numpy as np
 import os
-import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA as RandomizedPCA
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -65,6 +67,7 @@ def split_dataset_70_30(dataMatrix, labelVector):
 
     return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
 
+
 def centralizeData(dataMatrix):
     mean = np.mean(dataMatrix, axis=0)
     return dataMatrix - mean
@@ -126,47 +129,53 @@ def test(projectedData_train, projectedData_test, labelVector_train, labelVector
 dataMatrix, labelVector = createDataMatrixLabelVector(Dataset)
 # Split Data
 dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(dataMatrix, labelVector)
-dataMatrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(dataMatrix, labelVector)
+dataMatrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(dataMatrix,
+                                                                                                     labelVector)
 
-print("Data Matrix shape:", dataMatrix.shape)
-print("Label vector shape:", labelVector.shape)
-print("50% 50% Data Matrix test shape:", dataMatrix_test.shape)
-print("50% 50% Label vector test shape:", labelVector_test.shape)
-print("50% 50% Data Matrix train shape:", dataMatrix_train.shape)
-print("50% 50% Label vector train shape:", labelVector_train.shape)
-print("70% 30% Data Matrix test shape:", dataMatrix_test73.shape)
-print("70% 30% Label vector test shape:", labelVector_test73.shape)
-print("70% 30% Data Matrix train shape:", dataMatrix_train73.shape)
-print("70% 30% Label vector train shape:", labelVector_train73.shape)
-
+# print("Data Matrix shape:", dataMatrix.shape)
+# print("Label vector shape:", labelVector.shape)
+# print("50% 50% Data Matrix test shape:", dataMatrix_test.shape)
+# print("50% 50% Label vector test shape:", labelVector_test.shape)
+# print("50% 50% Data Matrix train shape:", dataMatrix_train.shape)
+# print("50% 50% Label vector train shape:", labelVector_train.shape)
+# print("70% 30% Data Matrix test shape:", dataMatrix_test73.shape)
+# print("70% 30% Label vector test shape:", labelVector_test73.shape)
+# print("70% 30% Data Matrix train shape:", dataMatrix_train73.shape)
+# print("70% 30% Label vector train shape:", labelVector_train73.shape)
+print("-------------------------------------------------")
 print("50% 50% split :")
+print("-------------------------------------------------")
 for alpha in alpha_values:
     print("For alpha : ", alpha)
     # Run PCA
+    timePCA_start = time.time()
     projectedData_train, projectionMatrix = PCA(dataMatrix_train, alpha)
-    print("Projection Matrix shape:", projectionMatrix.shape)
+    timePCA_end = time.time()
     # Project test Data
     projectedData_test = centralizeData(dataMatrix_test) @ projectionMatrix
     # Test data and Calculate Accuracy
+    print("-------------------------------------------------")
+    print("PCA :    time : ", (timePCA_end - timePCA_start))
     test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
-
+    timeRPCA_start = time.time()
+    rpca = RandomizedPCA(n_components=projectionMatrix.shape[1], svd_solver='randomized', random_state=42)
+    projectedData_train = rpca.fit_transform(dataMatrix_train)
+    timeRPCA_end = time.time()
+    print("-------------------------------------------------")
+    print("Randomized PCA :    time : ", (timeRPCA_end - timeRPCA_start))
+    projectedData_test = rpca.transform(dataMatrix_test)
+    test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+    print("---------------------------------------------------------------------------")
 
 print("70% 30% split :")
+print("-------------------------------------------------")
 for alpha in alpha_values:
     print("For alpha : ", alpha)
     # Run PCA
     projectedData_train, projectionMatrix = PCA(dataMatrix_train73, alpha)
+
     # Project test Data
     projectedData_test = centralizeData(dataMatrix_test73) @ projectionMatrix
     # Test data and Calculate Accuracy
     test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73)
-
-# print("Data Matrix shape:", dataMatrix.shape)
-# print("Label vector shape:", labelVector.shape)
-# print("Data Matrix test shape:", dataMatrix_test.shape)
-# print("Label vector test shape:", labelVector_test.shape)
-# print("Data Matrix train shape:", dataMatrix_train.shape)
-# print("Label vector train shape:", labelVector_train.shape)
-# print("Projection Matrix shape:", projectionMatrix.shape)
-# print("Projected train data shape ", projectedData_train.shape)
-# print("Projected test data shape ", projectedData_test.shape)
+    print("---------------------------------------------------------------------------")
