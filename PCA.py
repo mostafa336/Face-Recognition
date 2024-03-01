@@ -144,6 +144,7 @@ for alpha in alpha_values:
     print("For alpha : ", alpha)
     # Run PCA
     projectedData_train, projectionMatrix = PCA(dataMatrix_train, alpha)
+    print("Projection Matrix shape:", projectionMatrix.shape)
     # Project test Data
     projectedData_test = centralizeData(dataMatrix_test) @ projectionMatrix
     # Test data and Calculate Accuracy
