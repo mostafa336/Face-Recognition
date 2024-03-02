@@ -1,14 +1,12 @@
 import numpy as np
-# import cupy as cp
 import os
-
 import torch
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
-
 import time
 
 Dataset = "Dataset"
+k_values = [1, 3, 5, 7]
 
 
 def create_data_matrix_label_vector(directory):
@@ -27,12 +25,45 @@ def create_data_matrix_label_vector(directory):
     return np.array(images), np.array(labels)
 
 
-def split_dataset(data_matrix, label_vector):
-    data_matrix_train = data_matrix[::2]  # (odd rows)
-    label_vector_train = label_vector[::2]
-    data_matrix_test = data_matrix[1::2]  # (even rows)
-    label_vector_test = label_vector[1::2]
-    return data_matrix_train, label_vector_train, data_matrix_test, label_vector_test
+def split_dataset_50_50(dataMatrix, labelVector):
+    dataMatrix_train = dataMatrix[::2]  # (odd rows)
+    labelVector_train = labelVector[::2]
+    dataMatrix_test = dataMatrix[1::2]  # (even rows)
+    labelVector_test = labelVector[1::2]
+    return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
+
+
+def split_dataset_70_30(dataMatrix, labelVector):
+    # Assuming dataMatrix and labelVector are both numpy arrays
+    subjects = np.unique(labelVector)
+    dataMatrix_train = []
+    labelVector_train = []
+    dataMatrix_test = []
+    labelVector_test = []
+
+    for subject in subjects:
+        # Extract indices of instances belonging to the current subject
+        indices = np.where(labelVector == subject)[0]
+
+        # Split indices into training and test sets
+        train_indices = indices[:7]  # 7 instances for training
+        test_indices = indices[7:10]  # 3 instances for testing
+
+        # Add training data and labels
+        dataMatrix_train.append(dataMatrix[train_indices])
+        labelVector_train.extend(labelVector[train_indices])
+
+        # Add test data and labels
+        dataMatrix_test.append(dataMatrix[test_indices])
+        labelVector_test.extend(labelVector[test_indices])
+
+    # Concatenate lists into numpy arrays
+    dataMatrix_train = np.concatenate(dataMatrix_train)
+    dataMatrix_test = np.concatenate(dataMatrix_test)
+    labelVector_train = np.array(labelVector_train)
+    labelVector_test = np.array(labelVector_test)
+
+    return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
 
 
 def calculate_class_means(data_matrix, label_vector):
@@ -41,7 +72,9 @@ def calculate_class_means(data_matrix, label_vector):
     for class_label in unique_classes:
         class_indices = np.where(label_vector == class_label)[0]
         class_data = data_matrix[class_indices]
-        class_mean = np.mean(class_data, axis=0)
+        class_mean = torch.tensor(class_data, dtype=torch.float32)
+        class_mean = torch.mean(class_mean, dim=0)
+        class_mean = class_mean.numpy()
         class_means[class_label] = class_mean
 
     return class_means
@@ -89,12 +122,6 @@ def chooseDimensionality(eigenvalues, eigenvectors, num_components):
     return selected_eigenvalues, selected_eigenvectors
 
 
-def normalizeEigenvectors(eigenvectors):
-    for i in range(eigenvectors.shape[1]):
-        eigenvector = eigenvectors[:, i]
-        magnitude = np.linalg.norm(eigenvector)
-        eigenvectors[:, i] /= magnitude
-
 
 def LDA(data_matrix_train, label_vector_train, class_sizes):
     # calculate each class mean and overall mean
@@ -106,7 +133,9 @@ def LDA(data_matrix_train, label_vector_train, class_sizes):
                                                                    class_means, overall_mean, class_sizes)
 
     # Get the inverse of S_W
-    S_W_inv = np.linalg.inv(S_W)
+    S_W = torch.tensor(S_W, dtype=torch.float32)
+    S_W_inv = torch.linalg.inv(S_W)
+    S_W_inv = S_W_inv.numpy()
     result = S_W_inv @ S_B
 
     eigenvalues, eigenvectors = computeEigen(result)
@@ -116,59 +145,67 @@ def LDA(data_matrix_train, label_vector_train, class_sizes):
     selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues,
                                                                        eigenvectors, num_components)
 
-    # eigenvectors = Z @ selected_eigenvectors
-    # normalizeEigenvectors(eigenvectors)
-
-    return class_means, selected_eigenvectors
+    return selected_eigenvectors
 
 
 def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test):
-    classifier = KNeighborsClassifier(n_neighbors=1)
-    # Train the classifier using the projected training set
-    classifier.fit(projectedData_train, labelVector_train)
-    # Predict labels for the projected test set
-    predicted_labels = classifier.predict(projectedData_test)
-    # Calculate accuracy
-    accuracy = np.mean(predicted_labels == labelVector_test)
-    return accuracy
+    # Iterate over each value of k
+    for k in k_values:
+        classifier = KNeighborsClassifier(n_neighbors=k, weights='distance')
+        # Train the classifier using the training set
+        classifier.fit(projectedData_train, labelVector_train)
 
+        # Predict labels for the test set
+        predicted_labels = classifier.predict(projectedData_test)
 
-def centralize(data_matrix, label_vector, class_means):
-    Z = np.zeros((data_matrix.shape[0], data_matrix.shape[1]))
+        # Calculate accuracy
+        accuracy = np.mean(predicted_labels == labelVector_test)
+        print("Accuracy for k =", k, ":", accuracy)
 
-    for class_label, mean_vector in class_means.items():
-        class_indices = np.where(label_vector == class_label)[0]
-        z = np.subtract(data_matrix[class_indices], mean_vector)
-        Z[class_indices, :] = z
-
-    return Z
 
 
 start = time.time()
 # Read Data
 data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
 # Split Data
-data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset(data_matrix,
-                                                                                        label_vector)
-# Calculate number of samples in each class
-class_sizes = {class_label: np.sum(labelVector_train == class_label)
-               for class_label in np.unique(labelVector_train)}
+# 50,50
+# data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(data_matrix, label_vector)
+# class_sizes = {class_label: np.sum(labelVector_train == class_label)
+#                for class_label in np.unique(labelVector_train)}
+# # Run LDA algorithm
+# print("50%,50%")
+#
+# projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes)
+# overall_mean = np.mean(data_matrix_train, axis=0)
+#
+# Z_train = data_matrix_train - overall_mean
+# projectedData_train = Z_train @ projectionMatrix
+#
+# Z_test = dataMatrix_test - overall_mean
+# projectedData_test = Z_test @ projectionMatrix
+#
+# test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+
+########################################################################################################################
+# 70 , 30
+
+data_matrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(data_matrix, label_vector)
+class_sizes = {class_label: np.sum(labelVector_train73 == class_label)
+               for class_label in np.unique(labelVector_train73)}
 # Run LDA algorithm
-# LDA(data_matrix_train, label_vector_train, class_sizes)
-class_means, projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes)
+print("70%,30%")
 
-overall_mean = np.mean(data_matrix_train, axis=0)
-Z_train = data_matrix_train - overall_mean  # centralize(data_matrix_train,labelVector_train, class_means)
-projectedData_train = Z_train @ projectionMatrix
+projectionMatrix73 = LDA(data_matrix_train73, labelVector_train73, class_sizes)
+overall_mean73 = np.mean(data_matrix_train73, axis=0)
 
-Z_test = dataMatrix_test - overall_mean    # centralize(dataMatrix_test, labelVector_test, class_means)
-projectedData_test = Z_test @ projectionMatrix
+Z_train73 = data_matrix_train73 - overall_mean73
+projectedData_train73 = Z_train73 @ projectionMatrix73
 
-accuracy = test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+Z_test73 = dataMatrix_test73 - overall_mean73
+projectedData_test73 = Z_test73 @ projectionMatrix73
 
-print(f"Projected data : {projectedData_train.shape}")
-print(f"Projection matrix : {projectionMatrix.shape}")
-print("accuracy: ", accuracy)
+test(projectedData_train73, projectedData_test73, labelVector_train73, labelVector_test73)
+
 
 end = time.time()
 
