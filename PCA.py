@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 import os
 from sklearn.decomposition import PCA as RandomizedPCA
@@ -7,14 +6,16 @@ from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 
 Dataset = "Dataset"
-alpha_values = [0.8, 0.85, 0.9, 0.95]
+alpha_values = [0.8, 0.85, 0.9, 0.95, 1]
 k_values = [1, 3, 5, 7]
 
 
 def createDataMatrixLabelVector(directory):
     images = []
     labels = []
+
     for subject_id in os.listdir(directory):
+
         subject_path = os.path.join(directory, subject_id)
         if os.path.isdir(subject_path):
             for filename in os.listdir(subject_path):
@@ -74,7 +75,7 @@ def centralizeData(dataMatrix):
 
 
 def computeEigen(cov):
-    eigenvalues, eigenvectors = np.linalg.eig(cov)
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
     sorted_indices = np.argsort(eigenvalues)[::-1]
     sorted_eigenvalues = eigenvalues[sorted_indices]
     sorted_eigenvectors = eigenvectors[:, sorted_indices]
@@ -152,7 +153,9 @@ for alpha in alpha_values:
     projectedData_train, projectionMatrix = PCA(dataMatrix_train, alpha)
     timePCA_end = time.time()
     # Project test Data
-    projectedData_test = centralizeData(dataMatrix_test) @ projectionMatrix
+    mean = np.mean(dataMatrix_train, axis=0)
+    centralizedDataMatrix_test = dataMatrix_test-mean
+    projectedData_test = centralizedDataMatrix_test @ projectionMatrix
     # Test data and Calculate Accuracy
     print("-------------------------------------------------")
     print("PCA :    time : ", (timePCA_end - timePCA_start))
@@ -173,8 +176,9 @@ for alpha in alpha_values:
     print("For alpha : ", alpha)
     # Run PCA
     projectedData_train, projectionMatrix = PCA(dataMatrix_train73, alpha)
-    # Project test  Data
-    projectedData_test = centralizeData(dataMatrix_test73) @ projectionMatrix
+    mean = np.mean(dataMatrix_train73, axis=0)
+    centralizedDataMatrix_test = dataMatrix_test73 - mean
+    projectedData_test = centralizedDataMatrix_test @ projectionMatrix
     # Test data and Calculate Accuracy
     test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73)
     print("---------------------------------------------------------------------------")
