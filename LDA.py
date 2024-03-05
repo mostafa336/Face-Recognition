@@ -2,7 +2,9 @@ import numpy as np
 import os
 import torch
 import time
+import random
 from PIL import Image
+from matplotlib import pyplot as plt
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA2
 
@@ -14,6 +16,7 @@ colors = ['red', 'blue', 'green', 'orange']
 accuracies = []
 num_comp=[]
 times=[]
+predicted_labels = []
 
 def create_data_matrix_label_vector(directory):
     images = []
@@ -132,7 +135,7 @@ def calculate_within_and_between_class_scatter_matrices(data_matrix, label_vecto
                                           overall_mean, class_sizes):
     col = data_matrix.shape[1]  # number of features
     S_W = np.zeros((col, col))  # initialize S_W square matrix with zeros
-    S_B = np.zeros((col, col))  # initialize S_لآ square matrix with zeros
+    S_B = np.zeros((col, col))  # initialize S_B square matrix with zeros
 
     for class_label, mean_vector in class_means.items():
         # calculate S_W
@@ -140,7 +143,7 @@ def calculate_within_and_between_class_scatter_matrices(data_matrix, label_vecto
         z = np.subtract(data_matrix[class_indices], mean_vector)
         S_W += np.dot(np.transpose(z), z)
 
-        # calculate S_W
+        # calculate S_B
         nk = class_sizes[class_label]
         diff = np.array([mean_vector - overall_mean])
         S_B += nk * diff.T @ diff
@@ -180,10 +183,8 @@ def LDA(data_matrix_train, label_vector_train, class_sizes, num_components):
     S_W, S_B = calculate_within_and_between_class_scatter_matrices(data_matrix_train, label_vector_train,
                                                                    class_means, overall_mean, class_sizes)
 
-    print("before inv")
     S_W_torch = torch.tensor(S_W)
     S_W_inv = torch.pinverse(S_W_torch).numpy()
-    print("after inv")
     result = S_W_inv @ S_B
 
     eigenvalues, eigenvectors = computeEigen(result)
@@ -197,7 +198,7 @@ def LDA(data_matrix_train, label_vector_train, class_sizes, num_components):
 def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test):
     # Iterate over each value of k
     for k in k_values:
-        classifier = KNeighborsClassifier(n_neighbors=k)
+        classifier = KNeighborsClassifier(n_neighbors=k, weights='distance')
         # Train the classifier using the training set
         classifier.fit(projectedData_train, labelVector_train)
 
@@ -215,7 +216,7 @@ def lda_variation(data_matrix_train, label_vector_train, dataMatrix_test, labelV
     projectedData_train = lda2.fit_transform(data_matrix_train, label_vector_train)
     projectedData_test = lda2.transform(dataMatrix_test)
 
-    knn = KNeighborsClassifier(1)
+    knn = KNeighborsClassifier(n_neighbors=1, weights='distance')
     knn.fit(projectedData_train, label_vector_train)
     predicted_labels = knn.predict(projectedData_test)
 
@@ -243,8 +244,7 @@ def runLDA_FNF():
         test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
         end = time.time()
         print("LDA time:", end - start,'--'*30)
-
-
+        dataMatrix_test
 
 
 def runLDA50_50():
@@ -268,21 +268,21 @@ def runLDA50_50():
     end = time.time()
     print("LDA time:", end - start)
 
-def runLDAVAriation():
+def runLDAVariation():
     start = time.time()
     data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
 
     data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(data_matrix,
                                                                                                   label_vector)
-    class_sizes = {class_label: np.sum(labelVector_train == class_label)
-                   for class_label in np.unique(labelVector_train)}
+
     accuracy2 = lda_variation(data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test)
-    print("LDA variation accuracy:", accuracy2)
+    print("LDA variation accuracy at k = 1:", accuracy2)
     end = time.time()
     print("LDA variation Time:", end - start)
 
 
 def runLDA70_30():
+    print("70, 30")
     start = time.time()
     data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
     data_matrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(data_matrix,
@@ -306,11 +306,11 @@ def runLDA70_30():
 
     print("Time in seconds ", (end - start))
 
+
+
 # Run LDA algorithm
 # runLDA50_50()
 # runLDA70_30()
-# runLDAVAriation()
-runLDA_FNF()
-
-
+# runLDAVariation()
+# runLDA_FNF()
 
