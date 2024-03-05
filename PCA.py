@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA as RandomizedPCA
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 import matplotlib.pyplot as plt
-import copy
+import random
 
 Dataset = "Dataset"
 alpha_values = [0.8, 0.85, 0.9, 0.95]
@@ -14,8 +14,15 @@ k_values = [1, 3, 5, 7]
 num_nonFaces = [25, 50, 100, 150, 200, 250, 300, 350]
 colors = ['red', 'blue', 'green', 'orange']
 accuracies = []
-num_comp=[]
-times=[]
+num_comp = []
+times = []
+idCouldDetectFace = []
+idCouldNotDetectFace = []
+idCouldDetectNonFace = []
+idCouldNotDetectNonFace = []
+predicted_labels = []
+
+
 def createDataMatrixLabelVector_FNF():
     Faces = "Dataset"
     NonFaces = "nonfaces_dataset"
@@ -75,8 +82,10 @@ def createDataMatrixLabelVector(directory):
                 img = Image.open(img_path).convert('L')
                 img_array = np.array(img)
                 img_vector = img_array.flatten()
+
                 images.append(img_vector)
                 labels.append(int(subject_id[1:]))
+    print(np.array(images).shape)
     return np.array(images), np.array(labels)
 
 
@@ -163,7 +172,7 @@ def PCA(D, alpha):
     return projectedData, eigenvectors
 
 
-def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values):
+def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values, ExtractID):
     # Iterate over each value of k
     for k in k_values:
         classifier = KNeighborsClassifier(n_neighbors=k, weights='distance')
@@ -177,6 +186,8 @@ def test(projectedData_train, projectedData_test, labelVector_train, labelVector
         accuracy = np.mean(predicted_labels == labelVector_test)
         accuracies.append(accuracy)
         print("Accuracy for k =", k, ":", accuracy)
+        if ExtractID:
+            ExtractIDs(predicted_labels, labelVector_test)
 
 
 # print("Data Matrix shape:", dataMatrix.shape)
@@ -212,7 +223,7 @@ def runPCA50_50(k_values, alpha_values, RPCA):
         print("-------------------------------------------------")
         print("PCA :    time : ", (timePCA_end - timePCA_start))
         times.append(timePCA_end - timePCA_start)
-        test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values)
+        test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values,False)
         if RPCA:
             num_comp.append(projectionMatrix.shape[1])
             timeRPCA_start = time.time()
@@ -223,7 +234,7 @@ def runPCA50_50(k_values, alpha_values, RPCA):
             print("Randomized PCA :    time : ", (timeRPCA_end - timeRPCA_start))
             times.append(timeRPCA_end - timeRPCA_start)
             projectedData_test = rpca.transform(dataMatrix_test)
-            test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values)
+            test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values,False)
             print("---------------------------------------------------------------------------")
 
 
@@ -242,11 +253,11 @@ def runPCA70_30(k_values, alpha_values):
         centralizedDataMatrix_test = dataMatrix_test73 - mean
         projectedData_test = centralizedDataMatrix_test @ projectionMatrix
         # Test data and Calculate Accuracy
-        test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73, k_values)
+        test(projectedData_train, projectedData_test, labelVector_train73, labelVector_test73, k_values,False)
         print("---------------------------------------------------------------------------")
 
 
-def runPCA_FNF(k_values, alpha_values, num_nonFaces_values):
+def runPCA_FNF(k_values, alpha_values, num_nonFaces_values, ExtractId):
     dataMatrix, labelVector = createDataMatrixLabelVector_FNF()
     for num_nonFaces in num_nonFaces_values:
         dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_data_FNF(dataMatrix, labelVector,
@@ -260,7 +271,9 @@ def runPCA_FNF(k_values, alpha_values, num_nonFaces_values):
             centralizedDataMatrix_test = dataMatrix_test - mean
             projectedData_test = centralizedDataMatrix_test @ projectionMatrix
             # Test data and Calculate Accuracy
-            test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values)
+            test(projectedData_train, projectedData_test, labelVector_train, labelVector_test, k_values, ExtractId)
+            if ExtractId:
+                return dataMatrix_test
 
 
 def plot(PlotName, Xname, x, Yname, y):
@@ -277,16 +290,16 @@ def plot(PlotName, Xname, x, Yname, y):
 
 
 def chooseColor(alpha):
-        if alpha == 0.8:
-            return "green"
-        if alpha == 0.9:
-            return "red"
-        if alpha == 0.85:
-            return "blue"
-        if alpha == 0.95:
-            return "orange"
-        else:
-            return "gray"
+    if alpha == 0.8:
+        return "green"
+    if alpha == 0.9:
+        return "red"
+    if alpha == 0.85:
+        return "blue"
+    if alpha == 0.95:
+        return "orange"
+    else:
+        return "gray"
 
 
 def plotAlphaVsAccuracy():
@@ -313,7 +326,7 @@ def plotAccuracyVsK():
 # Faces vs Non Faces
 def plotAccuracyVsNonFaces():
     for alpha in alpha_values:
-        runPCA_FNF([1], [alpha], num_nonFaces)
+        runPCA_FNF([1], [alpha], num_nonFaces, False)
         plt.plot(num_nonFaces, accuracies, color=chooseColor(alpha), label='alpha = {}'.format(alpha))
         accuracies.clear()
     plt.xlabel('Number of Non Face Images in Training Set')
@@ -360,9 +373,11 @@ def plot50_50Vs70_30_k():
     plt.show()
     accuracies.clear()
 
+
 def plot50_50Vs70_30_k_alpha():
-   plot50_50Vs70_30_alpha()
-   plot50_50Vs70_30_k()
+    plot50_50Vs70_30_alpha()
+    plot50_50Vs70_30_k()
+
 
 def PCAVsRPCA_accuracy():
     runPCA50_50([1], [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1], True)
@@ -377,6 +392,7 @@ def PCAVsRPCA_accuracy():
     accuracies.clear()
     times.clear()
     num_comp.clear()
+
 
 def PCAVsRPCA_time():
     runPCA50_50([1], [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1], True)
@@ -393,9 +409,67 @@ def PCAVsRPCA_time():
     num_comp.clear()
     times.clear()
 
+
+def ExtractIDs(predictedLabel, label_test):
+    for i in range(len(predictedLabel)):
+        if predictedLabel[i] == label_test[i] and label_test[i] == 1:
+            idCouldDetectFace.append(i)
+        elif predictedLabel[i] == label_test[i] and label_test[i] == 0:
+            idCouldDetectNonFace.append(i)
+        if predictedLabel[i] != label_test[i] and label_test[i] == 1:
+            idCouldNotDetectFace.append(i)
+        elif predictedLabel[i] != label_test[i] and label_test[i] == 0:
+            idCouldNotDetectNonFace.append(i)
+
+
+def plotSuccessFailureCases():
+    idCouldDetectFace.clear()
+    idCouldNotDetectFace.clear()
+    idCouldNotDetectNonFace.clear()
+    idCouldDetectNonFace.clear()
+    dataMatrix = runPCA_FNF([1], [0.9], [300], True)
+    fig, axes = plt.subplots(4, 5, figsize=(25, 25))
+    axes = axes.flatten()
+    axeId = 0
+    Ids = random.sample(idCouldDetectFace, 5)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Face Successfully Detected", fontweight='bold', fontsize=20)
+
+        axeId = axeId + 1
+    Ids = random.sample(idCouldDetectNonFace, 5)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Non Face Successfully Detected", fontweight='bold', fontsize=20)
+        axeId = axeId + 1
+    Ids = random.sample(idCouldNotDetectFace, 1)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Failed To Detect Face", fontweight='bold', fontsize=20)
+        axeId = axeId + 1
+    Ids = random.sample(idCouldNotDetectNonFace, 9)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Failed To Detect Non Face", fontweight='bold', fontsize=20)
+        axeId = axeId + 1
+    plt.tight_layout()
+    plt.show()
+    accuracies.clear()
+
+
 plotAlphaVsAccuracy()
 plotAccuracyVsK()
 plotAccuracyVsNonFaces()
+plotSuccessFailureCases()
 plot50_50Vs70_30_k_alpha()
 PCAVsRPCA_accuracy()
 PCAVsRPCA_time()
+
