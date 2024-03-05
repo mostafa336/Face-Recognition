@@ -9,6 +9,11 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA2
 Dataset = "Dataset"
 k_values = [1, 3, 5, 7]
 
+num_nonFaces_values = [25, 50, 100, 150, 200, 250, 300, 350]
+colors = ['red', 'blue', 'green', 'orange']
+accuracies = []
+num_comp=[]
+times=[]
 
 def create_data_matrix_label_vector(directory):
     images = []
@@ -25,6 +30,34 @@ def create_data_matrix_label_vector(directory):
                 labels.append(int(subject_id[1:]))
     return np.array(images), np.array(labels)
 
+
+def createDataMatrixLabelVector_FNF():
+    Faces = "Dataset"
+    NonFaces = "nonfaces_dataset"
+    images = []
+    labels = []
+    for subject_id in os.listdir(Faces):
+        subject_path = os.path.join(Faces, subject_id)
+        if os.path.isdir(subject_path):
+            for filename in os.listdir(subject_path):
+                img_path = os.path.join(subject_path, filename)
+                img = Image.open(img_path).convert('L')
+                img_array = np.array(img)
+                img_vector = img_array.flatten()
+                images.append(img_vector)
+                labels.append(1)
+    for subject_id in os.listdir(NonFaces):
+        subject_path = os.path.join(NonFaces, subject_id)
+        if os.path.isdir(subject_path):
+            for filename in os.listdir(subject_path):
+                img_path = os.path.join(subject_path, filename)
+                img = Image.open(img_path).convert('L')
+                img = img.resize((92, 112))
+                img_array = np.array(img)
+                img_vector = img_array.flatten()
+                images.append(img_vector)
+                labels.append(0)
+    return np.array(images), np.array(labels)
 
 def split_dataset_50_50(dataMatrix, labelVector):
     dataMatrix_train = dataMatrix[::2]  # (odd rows)
@@ -66,6 +99,22 @@ def split_dataset_70_30(dataMatrix, labelVector):
 
     return dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test
 
+
+def split_data_FNF(data_matrix, label_vector, num_nonFaces):
+    # Define the number of samples for training
+    training_start = 200
+    training_end = 400 + num_nonFaces
+
+    # Split the data and labels
+    X_train = data_matrix[training_start:training_end]
+    X_test = data_matrix[:200]
+    X_test = np.concatenate((X_test, data_matrix[-200:]), axis=0)
+
+    y_train = label_vector[training_start:training_end]
+    y_test = label_vector[:200]
+    y_test = np.concatenate((y_test, label_vector[-200:]), axis=0)
+
+    return X_train, y_train, X_test, y_test
 
 def calculate_class_means(data_matrix, label_vector):
     unique_classes = np.unique(label_vector)  # get unique classes names
@@ -122,7 +171,7 @@ def chooseDimensionality(eigenvalues, eigenvectors, num_components):
 
 
 
-def LDA(data_matrix_train, label_vector_train, class_sizes):
+def LDA(data_matrix_train, label_vector_train, class_sizes, num_components):
     # calculate each class mean and overall mean
     class_means = calculate_class_means(data_matrix_train, label_vector_train)
     overall_mean = np.mean(data_matrix_train, axis=0)
@@ -139,8 +188,6 @@ def LDA(data_matrix_train, label_vector_train, class_sizes):
 
     eigenvalues, eigenvectors = computeEigen(result)
 
-    # Choose the top 39 eigenvalues and eigenvectors
-    num_components = 39
     selected_eigenvalues, selected_eigenvectors = chooseDimensionality(eigenvalues,
                                                                        eigenvectors, num_components)
 
@@ -176,56 +223,94 @@ def lda_variation(data_matrix_train, label_vector_train, dataMatrix_test, labelV
     return accuracy
 
 
-start = time.time()
-# Read Data
-data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
-# Split Data
-# 50,50
-data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(data_matrix, label_vector)
-class_sizes = {class_label: np.sum(labelVector_train == class_label)
-               for class_label in np.unique(labelVector_train)}
+def runLDA_FNF():
+    start = time.time()
+    dataMatrix, labelVector = createDataMatrixLabelVector_FNF()
+    for num_nonFaces in num_nonFaces_values:
+        dataMatrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_data_FNF(dataMatrix, labelVector,
+                                                                                                num_nonFaces)
+        class_sizes = {class_label: np.sum(labelVector_train == class_label)
+                       for class_label in np.unique(labelVector_train)}
+        projectionMatrix = LDA(dataMatrix_train, labelVector_train,class_sizes, 50)
+        overall_mean = np.mean(dataMatrix_train, axis=0)
+
+        Z_train = dataMatrix_train - overall_mean
+        projectedData_train = Z_train @ projectionMatrix
+
+        Z_test = dataMatrix_test - overall_mean
+        projectedData_test = Z_test @ projectionMatrix
+        # Test data and Calculate Accuracy
+        test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+        end = time.time()
+        print("LDA time:", end - start,'--'*30)
+
+
+
+
+def runLDA50_50():
+    print("50%,50%")
+    start = time.time()
+    data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
+    data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(data_matrix,
+                                                                                                  label_vector)
+    class_sizes = {class_label: np.sum(labelVector_train == class_label)
+                   for class_label in np.unique(labelVector_train)}
+    projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes, 39)
+    overall_mean = np.mean(data_matrix_train, axis=0)
+
+    Z_train = data_matrix_train - overall_mean
+    projectedData_train = Z_train @ projectionMatrix
+
+    Z_test = dataMatrix_test - overall_mean
+    projectedData_test = Z_test @ projectionMatrix
+
+    test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+    end = time.time()
+    print("LDA time:", end - start)
+
+def runLDAVAriation():
+    start = time.time()
+    data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
+
+    data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test = split_dataset_50_50(data_matrix,
+                                                                                                  label_vector)
+    class_sizes = {class_label: np.sum(labelVector_train == class_label)
+                   for class_label in np.unique(labelVector_train)}
+    accuracy2 = lda_variation(data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test)
+    print("LDA variation accuracy:", accuracy2)
+    end = time.time()
+    print("LDA variation Time:", end - start)
+
+
+def runLDA70_30():
+    start = time.time()
+    data_matrix, label_vector = create_data_matrix_label_vector(Dataset)
+    data_matrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(data_matrix,
+                                                                                                          label_vector)
+    class_sizes = {class_label: np.sum(labelVector_train73 == class_label)
+                   for class_label in np.unique(labelVector_train73)}
+
+    projectionMatrix73 = LDA(data_matrix_train73, labelVector_train73, class_sizes, 39)
+
+    overall_mean73 = np.mean(data_matrix_train73, axis=0)
+
+    Z_train73 = data_matrix_train73 - overall_mean73
+    projectedData_train73 = Z_train73 @ projectionMatrix73
+
+    Z_test73 = dataMatrix_test73 - overall_mean73
+    projectedData_test73 = Z_test73 @ projectionMatrix73
+
+    test(projectedData_train73, projectedData_test73, labelVector_train73, labelVector_test73)
+
+    end = time.time()
+
+    print("Time in seconds ", (end - start))
+
 # Run LDA algorithm
-print("50%,50%")
+# runLDA50_50()
+# runLDA70_30()
+# runLDAVAriation()
+runLDA_FNF()
 
-projectionMatrix = LDA(data_matrix_train, labelVector_train, class_sizes)
-overall_mean = np.mean(data_matrix_train, axis=0)
 
-Z_train = data_matrix_train - overall_mean
-projectedData_train = Z_train @ projectionMatrix
 
-Z_test = dataMatrix_test - overall_mean
-projectedData_test = Z_test @ projectionMatrix
-
-test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
-end = time.time()
-print("LDA time:", end - start)
-
-start2 = time.time()
-accuracy2 = lda_variation(data_matrix_train, labelVector_train, dataMatrix_test, labelVector_test)
-print("LDA variation accuracy:", accuracy2)
-end2 = time.time()
-print("LDA variation Time:", end2 - start2)
-
-########################################################################################################################
-# 70 , 30
-
-# data_matrix_train73, labelVector_train73, dataMatrix_test73, labelVector_test73 = split_dataset_70_30(data_matrix, label_vector)
-# class_sizes = {class_label: np.sum(labelVector_train73 == class_label)
-#                for class_label in np.unique(labelVector_train73)}
-# # Run LDA algorithm
-# print("70%,30%")
-#
-# projectionMatrix73 = LDA(data_matrix_train73, labelVector_train73, class_sizes)
-# overall_mean73 = np.mean(data_matrix_train73, axis=0)
-#
-# Z_train73 = data_matrix_train73 - overall_mean73
-# projectedData_train73 = Z_train73 @ projectionMatrix73
-#
-# Z_test73 = dataMatrix_test73 - overall_mean73
-# projectedData_test73 = Z_test73 @ projectionMatrix73
-#
-# test(projectedData_train73, projectedData_test73, labelVector_train73, labelVector_test73)
-#
-# end = time.time()
-#
-# print("Time in seconds ", (end - start))
