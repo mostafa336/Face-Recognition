@@ -11,7 +11,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA2
 Dataset = "Dataset"
 k_values = [1, 3, 5, 7]
 
-num_nonFaces_values = [25, 50, 100, 150, 200, 250, 300, 350]
+num_nonFaces_values = [25, 50, 100 , 150, 200, 250, 300, 350]
 colors = ['red', 'blue', 'green', 'orange']
 accuracies = []
 num_comp=[]
