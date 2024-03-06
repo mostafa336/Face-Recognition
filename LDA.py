@@ -17,7 +17,10 @@ accuracies = []
 num_comp=[]
 times=[]
 predicted_labels = []
-
+idCouldDetectFace = []
+idCouldNotDetectFace = []
+idCouldDetectNonFace = []
+idCouldNotDetectNonFace = []
 def create_data_matrix_label_vector(directory):
     images = []
     labels = []
@@ -195,7 +198,7 @@ def LDA(data_matrix_train, label_vector_train, class_sizes, num_components):
     return selected_eigenvectors
 
 
-def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test):
+def test(projectedData_train, projectedData_test, labelVector_train, labelVector_test,ExtractID):
     # Iterate over each value of k
     for k in k_values:
         classifier = KNeighborsClassifier(n_neighbors=k, weights='distance')
@@ -208,7 +211,8 @@ def test(projectedData_train, projectedData_test, labelVector_train, labelVector
         # Calculate accuracy
         accuracy = np.mean(predicted_labels == labelVector_test)
         print("Accuracy for k =", k, ":", accuracy)
-
+        if ExtractID:
+            ExtractIDs(predicted_labels, labelVector_test)
 
 def lda_variation(data_matrix_train, label_vector_train, dataMatrix_test, labelVector_test):
     lda2 = LDA2(solver= 'svd')
@@ -224,7 +228,7 @@ def lda_variation(data_matrix_train, label_vector_train, dataMatrix_test, labelV
     return accuracy
 
 
-def runLDA_FNF():
+def runLDA_FNF(ExtractId):
     start = time.time()
     dataMatrix, labelVector = createDataMatrixLabelVector_FNF()
     for num_nonFaces in num_nonFaces_values:
@@ -241,10 +245,11 @@ def runLDA_FNF():
         Z_test = dataMatrix_test - overall_mean
         projectedData_test = Z_test @ projectionMatrix
         # Test data and Calculate Accuracy
-        test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+        test(projectedData_train, projectedData_test, labelVector_train, labelVector_test,ExtractId)
         end = time.time()
         print("LDA time:", end - start,'--'*30)
-        dataMatrix_test
+        if ExtractId:
+           return dataMatrix_test
 
 
 def runLDA50_50():
@@ -264,7 +269,7 @@ def runLDA50_50():
     Z_test = dataMatrix_test - overall_mean
     projectedData_test = Z_test @ projectionMatrix
 
-    test(projectedData_train, projectedData_test, labelVector_train, labelVector_test)
+    test(projectedData_train, projectedData_test, labelVector_train, labelVector_test,False)
     end = time.time()
     print("LDA time:", end - start)
 
@@ -300,17 +305,67 @@ def runLDA70_30():
     Z_test73 = dataMatrix_test73 - overall_mean73
     projectedData_test73 = Z_test73 @ projectionMatrix73
 
-    test(projectedData_train73, projectedData_test73, labelVector_train73, labelVector_test73)
+    test(projectedData_train73, projectedData_test73, labelVector_train73, labelVector_test73,False)
 
     end = time.time()
 
     print("Time in seconds ", (end - start))
 
+def ExtractIDs(predictedLabel, label_test):
+    for i in range(len(predictedLabel)):
+        if predictedLabel[i] == label_test[i] and label_test[i] == 1:
+            idCouldDetectFace.append(i)
+        elif predictedLabel[i] == label_test[i] and label_test[i] == 0:
+            idCouldDetectNonFace.append(i)
+        if predictedLabel[i] != label_test[i] and label_test[i] == 1:
+            idCouldNotDetectFace.append(i)
+        elif predictedLabel[i] != label_test[i] and label_test[i] == 0:
+            idCouldNotDetectNonFace.append(i)
+def plotSuccessFailureCases():
+    idCouldDetectFace.clear()
+    idCouldNotDetectFace.clear()
+    idCouldNotDetectNonFace.clear()
+    idCouldDetectNonFace.clear()
+    dataMatrix = runLDA_FNF(True)
+    fig, axes = plt.subplots(4, 5, figsize=(25, 25))
+    axes = axes.flatten()
+    axeId = 0
+    Ids = random.sample(idCouldDetectFace, 5)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Face Successfully Detected", fontweight='bold', fontsize=20)
 
+        axeId = axeId + 1
+    Ids = random.sample(idCouldDetectNonFace, 5)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Non Face Successfully Detected", fontweight='bold', fontsize=18)
+        axeId = axeId + 1
+    Ids = random.sample(idCouldNotDetectFace, 1)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Failed To Detect Face", fontweight='bold', fontsize=20)
+        axeId = axeId + 1
+    Ids = random.sample(idCouldNotDetectNonFace, 9)
+    for id in Ids:
+        image = dataMatrix[id].reshape((112, 92))
+        axes[axeId].imshow(image, cmap='gray')
+        axes[axeId].axis('off')
+        axes[axeId].set_title(f"Failed To Detect Non Face", fontweight='bold', fontsize=20)
+        axeId = axeId + 1
+    plt.tight_layout()
+    plt.show()
+    accuracies.clear()
 
 # Run LDA algorithm
 # runLDA50_50()
 # runLDA70_30()
 # runLDAVariation()
-# runLDA_FNF()
-
+# runLDA_FNF(False)
+plotSuccessFailureCases()
